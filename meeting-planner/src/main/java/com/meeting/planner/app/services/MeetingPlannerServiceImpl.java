@@ -42,6 +42,7 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	 * Service de lancement d'une simulation de réservation de salle pour un
 	 * ensemble de réunion arrivant les unes après les autres
 	 * 
+	 * @param reunions
 	 * @throws MeetingPlannerTechnicalException
 	 */
 	@Override
@@ -62,6 +63,7 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	 * Service de recherche de la meilleure salle disponible en fonction des
 	 * paramètres d'une réunion (disponiblités, type et équipements requis
 	 * 
+	 * @param reunion
 	 * @throws MeetingPlannerTechnicalException
 	 */
 	@Override
@@ -81,7 +83,6 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 				optBestRoom = rechercherSalle(ModeRechercheEnum.AVANCEE, reunion, salles, equipementsRequis);
 				if (optBestRoom.isPresent()) {
 					reserverSalle(optBestRoom.get(), reunion.getHeureDebut());
-					reserverEquipementAmovible(equipementsAmovibles, optBestRoom.get(), reunion);
 				}
 			}
 
@@ -92,7 +93,7 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	}
 
 	/**
-	 * 
+	 * Recherche de la meilleur salle
 	 * @param reunion
 	 * @param salles
 	 * @param equipementsRequis
@@ -113,7 +114,8 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 
 		if (!sallesEventuelles.isEmpty()) {
 			salleIdeale = Optional.ofNullable(identifierSalleIdeale(sallesEventuelles));
-			// Vider la liste des équpements amovibles ajoutés aux salles
+			reserverEquipementAmovible(salleIdeale.get(), reunion);
+			// Vider la liste des équpements amovibles ajoutés temporairement aux salles
 			viderEquimentsAmoviblesSalles(sallesEventuelles);
 		}
 
@@ -121,7 +123,7 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	}
 
 	/**
-	 * 
+	 * Identification des éventuelles salles pouvant satisfaire les conditions
 	 * @param reunion
 	 * @param sallesDisponibles
 	 * @param equipementsRequis
@@ -146,6 +148,7 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	}
 
 	/**
+	 * Recherche simple d’une salle par calcul de score en prenant en compte les disponibilités la capacité, les équipements requis déjà présents dans la salle.
 	 * 
 	 * @param sallesDisponibles
 	 * @param equipementsRequis
@@ -161,7 +164,7 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	}
 
 	/**
-	 * 
+	 * Recherche avancée d’une salle en prenant en compte les disponibilités la capacité, les équipements requis déjà présents dans la salle et les équipements amovibles disponibles
 	 * @param reunion
 	 * @param sallesDisponibles
 	 * @param equipementsRequis
@@ -175,73 +178,70 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 		// Rendre la liste muable
 		sallesDisponibles = new ArrayList<>(sallesDisponibles);
 
-		// Trier ces salles dans l'odre décroissant de de nombre d'éléments requis
-		// trouvés pour traiter en premier celle qui contiennent déjà le max
-		// d'équipements
+		// Trier ces salles dans l'odre décroissant de de nombre d'éléments requis trouvés pour traiter en premier celle qui contiennent déjà le max d'équipements
 		Collections.sort(sallesDisponibles,
 				Comparator.comparingInt(
 						salle -> compterEquipementsRequisPresents(((Salle) salle).getEquipements(), equipementsRequis))
 						.reversed());
 
-		// Effectuer des combinaisosn en ajoutant les équipements amovibles nécessaires
-		// à ces salles
-		// en vérifiant la disponibilités des équipements amovibles nécessaires en
-		// fonction du créneau
+		// Effectuer des combinaisons en ajoutant temporairement à ces salles les équipements amovibles disponibles nécessaires
 		for (Salle salle : sallesDisponibles) {
-			// Identifier les équipements amovibles à ajouter dans la salle
 			List<Equipement> equipementsToAdd = equipementsRequis.stream().filter(e -> !salle.getEquipements().contains(e)).toList();
 
-			for (Equipement equipementToAdd : equipementsToAdd) {
-				// Identifier par leur nom dans la listes des équipements amovibles, la liste
-				// des équipement à ajouter
-				List<EquipementAmovible> listes = equipementsAmovibles.stream().filter(e -> e.getNom().equals(equipementToAdd.getNom())).toList();
-				
-				// Vérifier si parmi ces équipements y en a qui sont disponible pour ce créneau
-				// de réunion
-				for (EquipementAmovible equipementAmovible : listes) {
-					if (equipementAmovible.isAvailableForReservation(equipementAmovible, reunion)) {
-						// Ajouter le premier équipement trouvé disponible
-						salle.addEquipementsAmovible(equipementAmovible);
-						break;
-					}
-				}
-			}
+			ajouterEquipementsAmovibles(reunion, equipementsAmovibles, salle, equipementsToAdd);
 			sallesEventuelles.add(salle);
 		}
 	}
 
 	/**
-	 * 
+	 * Ajouter temporairement les équipements amovibles disponibles aux salles éventuelles
+	 * @param reunion
+	 * @param equipementsAmovibles
+	 * @param salle
+	 * @param equipementsToAdd
+	 */
+	private void ajouterEquipementsAmovibles(Reunion reunion, List<EquipementAmovible> equipementsAmovibles,
+			Salle salle, List<Equipement> equipementsToAdd) {
+		for (Equipement equipementToAdd : equipementsToAdd) {
+			// Identifier par leur nom dans la listes des équipements amovibles, la liste des équipement à ajouter
+			List<EquipementAmovible> listes = equipementsAmovibles.stream().filter(e -> e.getNom().equals(equipementToAdd.getNom())).toList();
+			
+			for (EquipementAmovible equipementAmovible : listes) {
+				if (equipementAmovible.isAvailableForReservation(reunion)) {
+					// Ajouter le premier équipement trouvé disponible
+					salle.addEquipementsAmovible(equipementAmovible);
+					break;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Identification de la salle idéale en fonction du score de chaque
 	 * @param sallesEventuelles
 	 * @return
 	 */
 	private Salle identifierSalleIdeale(List<Salle> sallesEventuelles) {
-		// Choisir la salle ayant la plus petite capacité et ayant le moins
-		// d'équipements amovibles ajoutés
-		// et ayant le moins d'éléments non nécessaire présents dans la salle
-
-		// Le scrore est égal à la capacité plus le nombres d'élements amovibles ajoutés
-		// Calcul du score pour chaque salle et stockage des scores dans une liste
-		// temporaire
+		// Calculer le scrore en fonction de la disponibilité, de la capacité, du type de réunions et et des équipements
 		List<Integer> scores = new ArrayList<>();
 		for (Salle salle : sallesEventuelles) {
-			int score = salle.getCapaciteMax() + salle.getEquipements().size();
+			int score = salle.getCapaciteMax() + salle.getEquipementsAmovible().size();
 			scores.add(score);
 		}
 
 		int indexMinScore = scores.indexOf(Collections.min(scores));
 
+		// Choisir la salle ayant la plus petite capacité pouvant correspondre et ayant le moins d'équipements à amovibles ajoutés
 		return sallesEventuelles.get(indexMinScore);
 	}
 
 	/**
+	 * Détermination du nombre d'éléments requis pas une réunion et déjà présents dans la salle
 	 * 
 	 * @param equipementsSalle
 	 * @param equipementsRequis
 	 * @return
 	 */
-	// Méthode pour compter le nombre d'équipements requis présents dans une liste
-	// d'équipements d'une salle
 	private int compterEquipementsRequisPresents(List<Equipement> equipementsSalle, List<Equipement> equipementsRequis) {
 		int count = 0;
 		for (Equipement equipement : equipementsSalle) {
@@ -253,7 +253,8 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	}
 
 	/**
-	 * Réserver une salle pour un créneau horaire de réunion
+	 * Réservation d'une salle pour un créneau horaire de réunion
+	 * 
 	 * @param salle
 	 * @param heureDebut
 	 */
@@ -271,28 +272,19 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	}
 
 	/**
+	 * Réservation d'une équipement amovible pour un créneau horaire de réunion
 	 * 
-	 * @param equipementsAmovibleDispo
 	 * @param bestRoom
 	 * @param reunion
 	 */
-	private void reserverEquipementAmovible(List<EquipementAmovible> equipementsAmovibleDispo, Salle bestRoom,
-			Reunion reunion) {
-		// Indiquer les équipements amovibles qui seront indisponibles sur certains
-		// créneaux car déjà utilisé dans d'autres salles à ce moment là
+	private void reserverEquipementAmovible(Salle bestRoom, Reunion reunion) {
 		List<EquipementAmovible> equipementsAmovibleSalle = bestRoom.getEquipementsAmovible();
 		for (EquipementAmovible equipementAmovibleSalle : equipementsAmovibleSalle) {
-			// Identifier par leur nom dans la listes des équipements amovibles, la liste
-			// des équipement à ajouter
-			List<EquipementAmovible> listes = equipementsAmovibleDispo.stream()
-					.filter(e -> e.getNom().equals(equipementAmovibleSalle.getNom())).toList();
-			// Vérifier si parmi ces équipements y en a qui sont disponible pour ce créneau
-			// de réunion
-			for (EquipementAmovible equipementAmovible : listes) {
-				if (equipementAmovible.isAvailableForReservation(equipementAmovible, reunion)) {
-					// Ajouter le premier équipement trouvé disponible
-					equipementAmovible.deleteDisponibiltes(
-							new Disponibilite(reunion.getHeureDebut(), reunion.getHeureFin()));
+			for (int i = 0; i < equipementsAmovibles.size(); i++) {
+				EquipementAmovible equipementAmovibleDispo = equipementsAmovibles.get(i);
+				if(equipementAmovibleDispo.getNom().equals(equipementAmovibleSalle.getNom()) && equipementAmovibleDispo.isAvailableForReservation(reunion)) {
+					// Ajouter le premier équipement amovible correspondant disponible
+					equipementAmovibleDispo.deleteDisponibilites(new Disponibilite(reunion.getHeureDebut(), reunion.getHeureFin()));
 					break;
 				}
 			}
@@ -300,6 +292,7 @@ public class MeetingPlannerServiceImpl implements MeetingPlannerService {
 	}
 
 	/**
+	 * Suppréssion des la liste des éléments amovibles attribuées aux salles lors de la recherche de salles éventuelles
 	 * 
 	 * @param sallesEventuelles
 	 */

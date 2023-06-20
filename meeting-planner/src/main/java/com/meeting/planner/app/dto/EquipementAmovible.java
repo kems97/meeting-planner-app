@@ -21,10 +21,10 @@ public class EquipementAmovible extends Equipement {
 		this.disponibilites = DonneesSimulationUtils.initDisponibililes(disponibilites);
 	}
 	
-	public boolean isAvailableForReservation(EquipementAmovible equipementAmovible, Reunion reunion) {
+	public boolean isAvailableForReservation(Reunion reunion) {
 		// Vérifier la disponibilité d'un equipement amovible en fonction des créneaux disponibles
-		if (!equipementAmovible.getDisponibilites().isEmpty()) {
-			for (Disponibilite disponibilite : equipementAmovible.getDisponibilites()) {
+		if (!this.getDisponibilites().isEmpty()) {
+			for (Disponibilite disponibilite : this.getDisponibilites()) {
 				if (disponibilite.getDateDebut() == reunion.getHeureDebut()) {
 					return true;
 				}
@@ -33,7 +33,7 @@ public class EquipementAmovible extends Equipement {
 		return false;
 	}
 	
-	public void deleteDisponibiltes(Disponibilite disponibilite) {
+	public void deleteDisponibilites(Disponibilite disponibilite) {
 		Iterator<Disponibilite> iterator = disponibilites.iterator();
         while (iterator.hasNext()) {
         	Disponibilite d = iterator.next();

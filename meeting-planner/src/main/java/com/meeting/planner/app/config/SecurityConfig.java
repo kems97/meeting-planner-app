@@ -25,11 +25,14 @@ public class SecurityConfig {
 	String username;
 
 	String password;
+	
+	String role;
 
 	@PostConstruct
 	private void postConstruct() {
-		username = env.getProperty("api.meeting.planner.username");
-		password = env.getProperty("api.meeting.planner.password");
+		username = env.getProperty("api.meeting.planner.auth.username");
+		password = env.getProperty("api.meeting.planner.auth.password");
+		role = env.getProperty("api.meeting.planner.auth.role");
 	}
 
 	@Bean
@@ -38,7 +41,8 @@ public class SecurityConfig {
 				.requestMatchers("/api/planner/bestroom", "/api/planner/simulation")
 				.authenticated().anyRequest()
 				.permitAll())
-			.httpBasic(Customizer.withDefaults());
+			.httpBasic(Customizer.withDefaults())
+			.csrf((csrf) -> csrf.disable());
 
 		return http.build();
 	}
@@ -48,7 +52,7 @@ public class SecurityConfig {
 		UserDetails user = User.builder()
 				.username(username)
 				.password("{noop}" + password) // {noop} indique que le mot de passe n'est pas crypté
-				.roles("USER").build();
+				.roles(role).build();
 		return new InMemoryUserDetailsManager(user);
 	}
 }
